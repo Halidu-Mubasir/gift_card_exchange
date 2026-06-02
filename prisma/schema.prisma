@@ -1,0 +1,166 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  SELLER
+  ADMIN
+}
+
+enum SubmissionStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  PAID
+}
+
+model User {
+  id               String       @id @default(cuid())
+  name             String
+  email            String       @unique
+  emailVerified    DateTime?
+  passwordHash     String?
+  image            String?
+  role             Role         @default(SELLER)
+  phone            String?
+  momoNumber       String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  submissions      Submission[]
+  accounts         Account[]
+  sentMessages     Message[]    @relation("SentMessages")
+  receivedMessages Message[]    @relation("ReceivedMessages")
+
+  @@index([email])
+  @@index([role])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model EmailOtp {
+  id        String   @id @default(cuid())
+  email     String
+  codeHash  String
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+model CardType {
+  id            String         @id @default(cuid())
+  name          String         @unique
+  logoUrl       String?
+  createdAt     DateTime       @default(now())
+  exchangeRates ExchangeRate[]
+  submissions   Submission[]
+}
+
+model ExchangeRate {
+  id            String   @id @default(cuid())
+  cardTypeId    String
+  denomination  Float
+  ratePerDollar Float
+  currency      String   @default("GHS")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  cardType      CardType @relation(fields: [cardTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([cardTypeId, denomination])
+  @@index([cardTypeId])
+}
+
+model Submission {
+  id               String           @id @default(cuid())
+  sellerId         String
+  cardTypeId       String
+  denomination     Float
+  cardCode         String
+  cardImageUrl     String?
+  cardImageBackUrl String?
+  status           SubmissionStatus @default(PENDING)
+  adminNote        String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  seller           User             @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  cardType         CardType         @relation(fields: [cardTypeId], references: [id])
+  payout           Payout?
+
+  @@index([sellerId])
+  @@index([status])
+  @@index([cardTypeId])
+}
+
+model Payout {
+  id           String     @id @default(cuid())
+  submissionId String     @unique
+  amount       Float
+  currency     String     @default("GHS")
+  method       String     @default("MoMo")
+  reference    String?
+  paidAt       DateTime   @default(now())
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+}
+
+// Direct messages between seller ↔ admin
+model Message {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  content    String   @db.Text
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, receiverId])
+  @@index([receiverId, senderId])
+}
+
+// Tracks when a user last opened a specific conversation (for email-spam guard)
+model ConversationPresence {
+  userId    String
+  partnerId String
+  seenAt    DateTime @default(now())
+
+  @@id([userId, partnerId])
+  @@index([userId])
+}
+
+// WebRTC signaling records (offer / answer / ice-candidate / hangup / decline)
+model CallSignal {
+  id        String   @id @default(cuid())
+  fromId    String
+  toId      String
+  type      String
+  payload   String   @db.Text
+  consumed  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([toId, consumed])
+}
