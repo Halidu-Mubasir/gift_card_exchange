@@ -155,7 +155,7 @@ export default function LoginPage() {
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <label className="block text-xs font-bold uppercase" style={{ color: '#4c4451', fontFamily: 'Inter, sans-serif', letterSpacing: '0.05em' }}>Password</label>
-                  <span className="text-xs font-bold cursor-pointer hover:underline" style={{ color: '#4b0082' }}>Forgot?</span>
+                  <Link href="/forgot-password" className="text-xs font-bold cursor-pointer hover:underline" style={{ color: '#4b0082' }}>Forgot?</Link>
                 </div>
                 <input
                   type="password"

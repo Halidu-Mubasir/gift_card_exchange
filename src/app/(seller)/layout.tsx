@@ -66,7 +66,11 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
 
       {/* User Profile */}
       <div className="border-t border-gray-100 p-4">
-        <div className="flex items-center gap-3 mb-3">
+        <Link
+          href="/seller/profile"
+          onClick={onClose}
+          className="flex items-center gap-3 mb-3 p-2 rounded-lg hover:bg-gray-50 transition-colors"
+        >
           <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: '#4b0082' }}>
             {initials}
           </div>
@@ -74,7 +78,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
             <p className="text-sm font-semibold text-indigo-900 truncate" style={{ fontFamily: 'Manrope, sans-serif' }}>{session?.user?.name}</p>
             <p className="text-xs text-slate-400 truncate">{session?.user?.email}</p>
           </div>
-        </div>
+        </Link>
         <button
           onClick={() => signOut({ callbackUrl: '/login' })}
           className="w-full text-left text-xs font-bold text-slate-400 hover:text-red-500 transition-colors px-1 py-1 uppercase tracking-wider"
