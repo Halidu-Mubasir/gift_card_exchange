@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   // Mark all fetched signals as consumed
   if (signals.length > 0) {
     await prisma.callSignal.updateMany({
-      where: { id: { in: signals.map(s => s.id) } },
+      where: { id: { in: signals.map((s: { id: string }) => s.id) } },
       data: { consumed: true },
     })
   }
