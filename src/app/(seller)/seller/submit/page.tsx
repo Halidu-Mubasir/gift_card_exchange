@@ -90,6 +90,7 @@ export default function SubmitCardPage() {
   // Form state
   const [cardTypeId, setCardTypeId] = useState('')
   const [denomination, setDenomination] = useState('')
+  const [cardCode, setCardCode] = useState('')
 
   // Images
   const [frontFile, setFrontFile] = useState<File | null>(null)
@@ -114,6 +115,7 @@ export default function SubmitCardPage() {
           const draft = JSON.parse(saved)
           if (draft.cardTypeId) setCardTypeId(draft.cardTypeId)
           if (draft.denomination) setDenomination(draft.denomination)
+          if (draft.cardCode) setCardCode(draft.cardCode)
         }
       } catch { /* ignore */ }
     }).finally(() => setLoadingData(false))
@@ -141,7 +143,7 @@ export default function SubmitCardPage() {
 
   function saveDraft() {
     try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify({ cardTypeId, denomination }))
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ cardTypeId, denomination, cardCode }))
       toast.success('Draft saved!')
     } catch {
       toast.error('Could not save draft')
@@ -152,6 +154,7 @@ export default function SubmitCardPage() {
     const errs: Record<string, string> = {}
     if (!cardTypeId) errs.cardTypeId = 'Please select a card brand'
     if (!denomination) errs.denomination = 'Please select a card value'
+    if (!cardCode.trim()) errs.cardCode = 'Card code is required'
     return errs
   }
 
@@ -165,6 +168,7 @@ export default function SubmitCardPage() {
       const formData = new FormData()
       formData.append('cardTypeId', cardTypeId)
       formData.append('denomination', denomination)
+      formData.append('cardCode', cardCode.trim())
       if (frontFile) formData.append('cardImageFront', frontFile)
 
       const res = await fetch('/api/submissions', { method: 'POST', body: formData })
@@ -183,7 +187,8 @@ export default function SubmitCardPage() {
   // Stepper state
   const step1done = !!cardTypeId
   const step2done = !!denomination
-  const step3done = !!frontFile
+  const step3done = !!cardCode.trim()
+  const step4done = !!frontFile
 
   return (
     <div className="max-w-3xl mx-auto space-y-8" style={{ fontFamily: 'Inter, sans-serif' }}>
@@ -202,10 +207,11 @@ export default function SubmitCardPage() {
         <div className="absolute top-5 left-0 w-full h-0.5 z-0" style={{ backgroundColor: '#ebe7e7' }} />
         <div className="flex justify-between relative z-10">
           {[
-            { label: 'BRAND', done: step1done, active: !step1done },
-            { label: 'VALUE', done: step2done, active: step1done && !step2done },
-            { label: 'UPLOAD', done: step3done, active: step1done && step2done },
-          ].map(({ label, done, active }) => (
+            { label: 'BRAND', done: step1done, active: !step1done, icon: '🏷️' },
+            { label: 'VALUE', done: step2done, active: step1done && !step2done, icon: '💵' },
+            { label: 'CODE', done: step3done, active: step1done && step2done && !step3done, icon: '🔑' },
+            { label: 'PHOTO', done: step4done, active: step1done && step2done && step3done, icon: '📷' },
+          ].map(({ label, done, active, icon }) => (
             <div key={label} className="flex flex-col items-center">
               <div
                 className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold"
@@ -215,7 +221,7 @@ export default function SubmitCardPage() {
                   boxShadow: active ? '0 0 0 4px #f0dbff' : done ? '0 0 0 3px #dcfce7' : undefined,
                 }}
               >
-                {done ? '✓' : active ? '✎' : '📷'}
+                {done ? '✓' : active ? '✎' : icon}
               </div>
               <span className="mt-2 text-[10px] font-bold uppercase tracking-widest"
                 style={{ color: done ? '#006e2a' : active ? '#4b0082' : '#7d7483', fontFamily: 'Inter, sans-serif' }}>
@@ -242,7 +248,7 @@ export default function SubmitCardPage() {
               </div>
             </div>
 
-            {/* ── Brand + Value ─────────────────────────────── */}
+            {/* ── Brand + Value + Code ──────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label style={labelStyle}>Selected Brand</label>
@@ -318,6 +324,35 @@ export default function SubmitCardPage() {
                   </p>
                 )}
               </div>
+            </div>
+
+            {/* ── Card Code ──────────────────────────────────── */}
+            <div>
+              <label style={labelStyle}>Gift Card Code / PIN</label>
+              <input
+                type="text"
+                value={cardCode}
+                onChange={e => { setCardCode(e.target.value); setErrors(er => ({ ...er, cardCode: '' })) }}
+                placeholder="Enter the card code (e.g., XXXX-XXXX-XXXX-XXXX)"
+                style={{
+                  border: errors.cardCode ? '1px solid #ba1a1a' : '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  width: '100%',
+                  fontFamily: 'monospace',
+                  fontSize: '14px',
+                  outline: 'none',
+                  backgroundColor: 'white',
+                  color: '#1c1b1b',
+                  letterSpacing: '0.5px',
+                }}
+                onFocus={e => e.target.style.borderColor = '#4b0082'}
+                onBlur={e => e.target.style.borderColor = errors.cardCode ? '#ba1a1a' : '#e5e7eb'}
+              />
+              {errors.cardCode && <p style={{ color: '#ba1a1a', fontSize: '12px', marginTop: '4px' }}>{errors.cardCode}</p>}
+              <p style={{ fontSize: '12px', color: '#7d7483', marginTop: '6px' }}>
+                Enter the redemption code found on the back of your gift card. This is usually a series of numbers/letters.
+              </p>
             </div>
 
             {/* Selected brand chip */}
