@@ -44,48 +44,60 @@ function formatDuration(s: number) {
   return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
+function initials(name: string) {
+  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
+
+interface Admin {
+  id: string
+  name: string
+  email: string
+  role: string
+}
+
 export default function SellerMessagesPage() {
   const { data: session } = useSession()
   const myId = session?.user?.id
 
   const [conversations, setConversations] = useState<Conversation[]>([])
-  const [adminId, setAdminId] = useState<string | undefined>(undefined)
+  const [selectedAdminId, setSelectedAdminId] = useState<string | undefined>(undefined)
   const [messages, setMessages] = useState<Message[]>([])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [loadingMsgs, setLoadingMsgs] = useState(false)
-  const [hasConversation, setHasConversation] = useState(false)
   const [mobileShowChat, setMobileShowChat] = useState(false)
+  const [showNewMsgModal, setShowNewMsgModal] = useState(false)
+  const [admins, setAdmins] = useState<Admin[]>([])
+  const [adminSearch, setAdminSearch] = useState('')
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  // Ref mirrors adminId so callbacks always read the current value (avoids stale closures)
-  const adminIdRef = useRef<string | undefined>(undefined)
+  // Ref mirrors selectedAdminId so callbacks always read the current value (avoids stale closures)
+  const selectedAdminIdRef = useRef<string | undefined>(undefined)
 
   const { callState, isMuted, duration, pendingOffer, startCall, acceptCall, declineCall, endCall, toggleMute } =
-    useWebRTC(myId, adminId)
+    useWebRTC(myId, selectedAdminId)
 
-  // ── Step 1: Restore adminId from URL on mount ───────────────────────────
+  // ── Step 1: Restore selectedAdminId from URL on mount ──────────────────
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const urlWith = params.get('with')
-    if (urlWith && !adminIdRef.current) {
-      adminIdRef.current = urlWith
-      setAdminId(urlWith)
-      setHasConversation(true)
+    if (urlWith && !selectedAdminIdRef.current) {
+      selectedAdminIdRef.current = urlWith
+      setSelectedAdminId(urlWith)
     }
   }, [])
 
-  // ── Step 2: Persist adminId to URL whenever it changes ─────────────────
+  // ── Step 2: Persist selectedAdminId to URL whenever it changes ─────────
   useEffect(() => {
-    if (!adminId) return
+    if (!selectedAdminId) return
     const url = new URL(window.location.href)
-    if (url.searchParams.get('with') !== adminId) {
-      url.searchParams.set('with', adminId)
+    if (url.searchParams.get('with') !== selectedAdminId) {
+      url.searchParams.set('with', selectedAdminId)
       window.history.replaceState({}, '', url.toString())
     }
-  }, [adminId])
+  }, [selectedAdminId])
 
   // ── Step 3: Load conversation list ─────────────────────────────────────
   function loadConversations() {
@@ -94,11 +106,11 @@ export default function SellerMessagesPage() {
       .then(d => {
         if (!d.success) return
         setConversations(d.data)
-        const adminConv = (d.data as Conversation[]).find(c => c.partner.role === 'ADMIN')
-        if (adminConv && !adminIdRef.current) {
-          adminIdRef.current = adminConv.partner.id
-          setAdminId(adminConv.partner.id)
-          setHasConversation(true)
+        // Auto-select: prefer the URL-restored ID, then fall back to first conversation
+        if (!selectedAdminIdRef.current && d.data.length > 0) {
+          const first = (d.data as Conversation[])[0]
+          selectedAdminIdRef.current = first.partner.id
+          setSelectedAdminId(first.partner.id)
         }
       })
       .catch(err => console.error('[messages] loadConversations failed', err))
@@ -110,17 +122,17 @@ export default function SellerMessagesPage() {
     return () => clearInterval(interval)
   }, [])
 
-  // ── Step 4: Fetch + poll messages whenever adminId is set ───────────────
-  // Fetch is defined INSIDE the effect so adminId is never stale in the interval
+  // ── Step 4: Fetch + poll messages whenever selectedAdminId is set ──────
+  // Fetch is defined INSIDE the effect so selectedAdminId is never stale in the interval
   useEffect(() => {
-    if (!adminId) return
-    adminIdRef.current = adminId
+    if (!selectedAdminId) return
+    selectedAdminIdRef.current = selectedAdminId
 
     let active = true
 
     async function fetchMessages() {
       try {
-        const res = await fetch(`/api/messages/conversation?with=${adminId}`)
+        const res = await fetch(`/api/messages/conversation?with=${selectedAdminId}`)
         if (!res.ok) {
           console.error('[messages] conversation fetch failed:', res.status, await res.text())
           return
@@ -134,6 +146,7 @@ export default function SellerMessagesPage() {
 
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMessages([])
     setLoadingMsgs(true)
     fetchMessages().finally(() => { if (active) setLoadingMsgs(false) })
     pollRef.current = setInterval(fetchMessages, 4000)
@@ -142,32 +155,40 @@ export default function SellerMessagesPage() {
       active = false
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     }
-  }, [adminId])
+  }, [selectedAdminId])
 
   // ── Scroll to bottom on every messages update ───────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // ── Start a new chat with admin ─────────────────────────────────────────
-  async function startChat() {
+  // ── Open new message modal ─────────────────────────────────────────────
+  async function openNewMsgModal() {
     const res = await fetch('/api/users?role=ADMIN')
     const d = await res.json()
-    if (d.success && d.data.length > 0) {
-      const admin = d.data[0]
-      adminIdRef.current = admin.id
-      setAdminId(admin.id)
-      setHasConversation(true)
-      setMobileShowChat(true)
-    } else {
-      toast.error('No admin available to chat with')
-    }
+    if (d.success) setAdmins(d.data)
+    setShowNewMsgModal(true)
+  }
+
+  // ── Select admin to message ────────────────────────────────────────────
+  function selectAdmin(admin: Admin) {
+    selectedAdminIdRef.current = admin.id
+    setSelectedAdminId(admin.id)
+    setShowNewMsgModal(false)
+    setMobileShowChat(true)
+  }
+
+  // ── Select existing conversation ───────────────────────────────────────
+  function selectConversation(conv: Conversation) {
+    selectedAdminIdRef.current = conv.partner.id
+    setSelectedAdminId(conv.partner.id)
+    setMobileShowChat(true)
   }
 
   // ── Send a message ──────────────────────────────────────────────────────
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault()
-    if (!text.trim() || !adminId || sending) return
+    if (!text.trim() || !selectedAdminId || sending) return
     setSending(true)
     const content = text.trim()
     setText('')
@@ -175,13 +196,13 @@ export default function SellerMessagesPage() {
       const res = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ receiverId: adminId, content }),
+        body: JSON.stringify({ receiverId: selectedAdminId, content }),
       })
       const d = await res.json()
       if (d.success) {
         // Optimistic: append the new message immediately, polling will reconcile
         setMessages(prev => [...prev, d.data])
-        if (!hasConversation) { setHasConversation(true); loadConversations() }
+        loadConversations()
       } else {
         toast.error(d.error ?? 'Failed to send message')
         setText(content)
@@ -212,21 +233,67 @@ export default function SellerMessagesPage() {
     else grouped.push({ date, msgs: [msg] })
   }
 
-  const adminConv = conversations.find(c => c.partner.role === 'ADMIN')
+  const selectedConv = conversations.find(c => c.partner.id === selectedAdminId)
+
+  const filteredAdmins = admins.filter(a =>
+    a.name.toLowerCase().includes(adminSearch.toLowerCase()) ||
+    a.email.toLowerCase().includes(adminSearch.toLowerCase())
+  )
 
   return (
     <div className="flex h-[calc(100vh-80px)] -mx-4 -my-6 md:-mx-8 md:-my-8 overflow-hidden" style={{ fontFamily: 'Inter, sans-serif' }}>
+
+      {/* ── New Message Modal ───────────────────────────────────────────── */}
+      {showNewMsgModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl w-96 shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #f1f5f9' }}>
+              <h3 style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '16px', color: '#1e1b4b' }}>New Message</h3>
+              <button onClick={() => setShowNewMsgModal(false)} className="text-slate-400 hover:text-slate-600 text-xl">✕</button>
+            </div>
+            <div className="p-4">
+              <input
+                type="text"
+                placeholder="Search admins…"
+                value={adminSearch}
+                onChange={e => setAdminSearch(e.target.value)}
+                className="w-full px-4 py-2.5 rounded-xl border text-sm outline-none focus:border-indigo-400"
+                style={{ borderColor: '#e5e7eb', fontFamily: 'Inter, sans-serif', color: '#1c1b1b' }}
+              />
+            </div>
+            <div className="max-h-72 overflow-y-auto pb-2">
+              {filteredAdmins.length === 0 ? (
+                <p className="text-center py-8 text-sm text-slate-400">No admins found</p>
+              ) : filteredAdmins.map(a => (
+                <button
+                  key={a.id}
+                  onClick={() => selectAdmin(a)}
+                  className="w-full flex items-center gap-3 px-6 py-3 hover:bg-indigo-50 transition-colors text-left"
+                >
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: '#4b0082' }}>
+                    {initials(a.name)}
+                  </div>
+                  <div className="min-w-0">
+                    <p style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '14px', color: '#1e1b4b' }} className="truncate">{a.name}</p>
+                    <p style={{ fontSize: '12px', color: '#7d7483' }} className="truncate">{a.email}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Incoming call overlay ───────────────────────────────────────── */}
       {callState === 'incoming' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="bg-white rounded-2xl p-8 w-80 flex flex-col items-center gap-6 shadow-2xl">
             <div className="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl" style={{ backgroundColor: '#4b0082' }}>
-              {adminConv?.partner.name.slice(0, 2).toUpperCase() ?? 'AD'}
+              {selectedConv ? initials(selectedConv.partner.name) : 'AD'}
             </div>
             <div className="text-center">
               <p style={{ fontFamily: 'Manrope, sans-serif', fontWeight: 700, fontSize: '18px', color: '#1e1b4b' }}>Incoming Call</p>
-              <p style={{ fontSize: '13px', color: '#7d7483' }}>{adminConv?.partner.name ?? 'Admin'} · Trade Nest Support</p>
+              <p style={{ fontSize: '13px', color: '#7d7483' }}>{selectedConv?.partner.name ?? 'Admin'} · Trade Nest Support</p>
             </div>
             <div className="flex gap-4">
               <button onClick={declineCall} className="w-14 h-14 rounded-full flex items-center justify-center text-white text-2xl transition-all hover:scale-105 active:scale-95" style={{ backgroundColor: '#ba1a1a' }}>✕</button>
@@ -262,90 +329,94 @@ export default function SellerMessagesPage() {
         <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #f1f5f9' }}>
           <div>
             <h2 style={{ fontFamily: 'Manrope, sans-serif', fontSize: '16px', fontWeight: 700, color: '#1e1b4b' }}>Messages</h2>
-            <p style={{ fontSize: '12px', color: '#7d7483' }}>Chat with Trade Nest support</p>
+            <p style={{ fontSize: '12px', color: '#7d7483' }}>{conversations.length} conversation{conversations.length !== 1 ? 's' : ''}</p>
           </div>
-          {!hasConversation && !adminId && (
-            <button
-              onClick={startChat}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all hover:bg-indigo-100"
-              style={{ backgroundColor: '#eff6ff', color: '#4b0082', fontFamily: 'Manrope, sans-serif' }}
-            >
-              + New Chat
-            </button>
-          )}
+          <button
+            onClick={openNewMsgModal}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all hover:bg-indigo-100"
+            style={{ backgroundColor: '#eff6ff', color: '#4b0082', fontFamily: 'Manrope, sans-serif' }}
+          >
+            + New
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {adminId ? (
-            <div
-              onClick={() => setMobileShowChat(true)}
-              className="px-5 py-4 cursor-pointer transition-colors"
-              style={{
-                backgroundColor: 'rgba(238,242,255,0.6)',
-                borderRight: '4px solid #1e1b4b',
-                borderBottom: '1px solid #f9fafb',
-              }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ backgroundColor: '#4b0082' }}>
-                  {adminConv?.partner.name.slice(0, 2).toUpperCase() ?? 'AD'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-center">
-                    <span style={{ fontFamily: 'Manrope, sans-serif', fontSize: '14px', fontWeight: 700, color: '#1e1b4b' }}>
-                      {adminConv?.partner.name ?? 'Support'}
-                    </span>
-                    {adminConv?.lastMessage && (
-                      <span style={{ fontSize: '10px', color: '#9ca3af', fontWeight: 600 }}>
-                        {timeAgo(adminConv.lastMessage.createdAt)}
-                      </span>
-                    )}
-                  </div>
-                  <p style={{ fontSize: '12px', color: '#7d7483' }} className="truncate">
-                    {adminConv?.lastMessage?.content ?? 'Start chatting with support'}
-                  </p>
-                </div>
-                {(adminConv?.unreadCount ?? 0) > 0 && (
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white flex-shrink-0" style={{ backgroundColor: '#ba1a1a' }}>
-                    {adminConv!.unreadCount}
-                  </span>
-                )}
-              </div>
-            </div>
-          ) : (
+          {conversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 gap-3 px-6 text-center">
               <span style={{ fontSize: '32px' }}>💬</span>
               <p style={{ fontSize: '13px', color: '#7d7483', fontFamily: 'Manrope, sans-serif', fontWeight: 600 }}>No conversations yet</p>
-              <p style={{ fontSize: '12px', color: '#9ca3af' }}>Tap &ldquo;New Chat&rdquo; to message our support team</p>
+              <p style={{ fontSize: '12px', color: '#9ca3af' }}>Click &ldquo;+ New&rdquo; to message support</p>
               <button
-                onClick={startChat}
+                onClick={openNewMsgModal}
                 className="mt-2 px-4 py-2 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95"
                 style={{ backgroundColor: '#4b0082', fontFamily: 'Manrope, sans-serif' }}
               >
                 Start Chat
               </button>
             </div>
+          ) : (
+            conversations.map(conv => {
+              const isActive = conv.partner.id === selectedAdminId
+              return (
+                <div
+                  key={conv.partner.id}
+                  onClick={() => selectConversation(conv)}
+                  className="px-5 py-4 cursor-pointer transition-colors"
+                  style={{
+                    backgroundColor: isActive ? 'rgba(238,242,255,0.6)' : 'white',
+                    borderRight: isActive ? '4px solid #1e1b4b' : '4px solid transparent',
+                    borderBottom: '1px solid #f9fafb',
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ backgroundColor: '#4b0082' }}>
+                      {initials(conv.partner.name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-center">
+                        <span style={{ fontFamily: 'Manrope, sans-serif', fontSize: '14px', fontWeight: 700, color: isActive ? '#1e1b4b' : '#374151' }} className="truncate">
+                          {conv.partner.name}
+                        </span>
+                        {conv.lastMessage && (
+                          <span style={{ fontSize: '10px', color: '#9ca3af', fontWeight: 600, flexShrink: 0, marginLeft: '8px' }}>
+                            {timeAgo(conv.lastMessage.createdAt)}
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ fontSize: '12px', color: '#7d7483' }} className="truncate">
+                        {conv.lastMessage?.content ?? 'Start chatting'}
+                      </p>
+                    </div>
+                    {conv.unreadCount > 0 && (
+                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white flex-shrink-0" style={{ backgroundColor: '#ba1a1a' }}>
+                        {conv.unreadCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })
           )}
         </div>
       </aside>
 
       {/* ── Right Panel: Chat ──────────────────────────────────────────── */}
-      <section className={`flex-1 flex flex-col bg-white min-w-0 ${!mobileShowChat && adminId ? 'hidden md:flex' : adminId ? 'flex' : 'hidden md:flex'}`}>
-        {!adminId ? (
+      <section className={`flex-1 flex flex-col bg-white min-w-0 ${!mobileShowChat ? 'hidden md:flex' : 'flex'}`}>
+        {!selectedAdminId ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-4" style={{ backgroundColor: '#fcf9f8' }}>
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#eff6ff' }}>
               <span style={{ fontSize: '32px' }}>💬</span>
             </div>
             <div className="text-center">
               <p style={{ fontFamily: 'Manrope, sans-serif', fontSize: '16px', fontWeight: 700, color: '#1e1b4b' }}>Chat with Support</p>
-              <p style={{ fontSize: '13px', color: '#7d7483', marginTop: '4px' }}>Start a conversation with our support team.</p>
+              <p style={{ fontSize: '13px', color: '#7d7483', marginTop: '4px' }}>Select a conversation or start a new one.</p>
             </div>
             <button
-              onClick={startChat}
+              onClick={openNewMsgModal}
               className="px-6 py-3 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95"
               style={{ backgroundColor: '#4b0082', fontFamily: 'Manrope, sans-serif', boxShadow: '0 4px 12px rgba(75,0,130,0.2)' }}
             >
-              Start Chat with Admin
+              New Message
             </button>
           </div>
         ) : (
@@ -357,15 +428,17 @@ export default function SellerMessagesPage() {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                 </button>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0" style={{ backgroundColor: '#4b0082' }}>
-                  {adminConv?.partner.name.slice(0, 2).toUpperCase() ?? 'AD'}
+                  {selectedConv ? initials(selectedConv.partner.name) : 'AD'}
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-bold truncate" style={{ fontFamily: 'Manrope, sans-serif', fontSize: '15px', color: '#1c1b1b' }}>
-                    {adminConv?.partner.name ?? 'Trade Nest Support'}
+                    {selectedConv?.partner.name ?? 'Trade Nest Support'}
                   </h3>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#22c55e' }} />
-                    <span style={{ fontSize: '12px', color: '#7d7483', fontWeight: 600 }}>Support Team · Online</span>
+                    <span style={{ fontSize: '12px', color: '#7d7483', fontWeight: 600 }}>
+                      {selectedConv?.partner.email ?? 'Support Team'} · Online
+                    </span>
                   </div>
                 </div>
               </div>
