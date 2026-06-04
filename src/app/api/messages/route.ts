@@ -32,8 +32,8 @@ export async function GET() {
   ])
 
   const partnerIds = Array.from(new Set([
-    ...sent.map(m => m.receiverId),
-    ...received.map(m => m.senderId),
+    ...sent.map((m: { receiverId: string }) => m.receiverId),
+    ...received.map((m: { senderId: string }) => m.senderId),
   ]))
 
   // Fetch partner user details + last message + unread count for each
