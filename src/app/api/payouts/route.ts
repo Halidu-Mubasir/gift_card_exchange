@@ -1,6 +1,5 @@
 import { getServerSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { Prisma } from '@prisma/client'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -44,7 +43,7 @@ export async function POST(request: Request) {
     const data = createPayoutSchema.parse(body)
 
     // Run in a transaction: create payout + update submission status to PAID
-    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const result = await prisma.$transaction(async (tx) => {
       const payout = await tx.payout.create({ data })
       const submission = await tx.submission.update({
         where: { id: data.submissionId },
