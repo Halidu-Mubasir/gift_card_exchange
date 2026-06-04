@@ -1,5 +1,6 @@
 import { getServerSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -58,7 +59,7 @@ export async function PATCH(
       const payoutAmount = submission.denomination * rate.ratePerDollar
 
       // Use a transaction to create payout and update submission status
-      const result = await prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         // Create payout record
         const payout = await tx.payout.create({
           data: {
