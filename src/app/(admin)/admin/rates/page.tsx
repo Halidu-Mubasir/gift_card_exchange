@@ -31,6 +31,7 @@ export default function AdminRatesPage() {
   const [newTypeName, setNewTypeName] = useState('')
   const [showAddRate, setShowAddRate] = useState(false)
   const [newRate, setNewRate] = useState({ cardTypeId: '', denomination: '', ratePerDollar: '' })
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
   function load() {
     Promise.all([
@@ -92,6 +93,15 @@ export default function AdminRatesPage() {
     toast.success('Rate added!')
     setShowAddRate(false)
     setNewRate({ cardTypeId: '', denomination: '', ratePerDollar: '' })
+    load()
+  }
+
+  async function deleteRate(rateId: string) {
+    const res = await fetch(`/api/rates/${rateId}`, { method: 'DELETE' })
+    const json = await res.json()
+    if (!json.success) { toast.error('Failed to delete rate'); return }
+    toast.success('Rate deleted!')
+    setDeleteConfirm(null)
     load()
   }
 
@@ -168,11 +178,18 @@ export default function AdminRatesPage() {
                             <button onClick={() => setEditingId(null)} className="px-3 py-1.5 text-xs font-bold rounded-lg" style={{ border: '1px solid #e5e7eb', color: '#4c4451' }}>Cancel</button>
                           </div>
                         ) : (
-                          <button onClick={() => { setEditingId(r.id); setEditValue(String(r.ratePerDollar)) }}
-                            className="px-3 py-1.5 text-xs font-bold rounded-lg hover:bg-indigo-50 transition-colors"
-                            style={{ border: '1px solid #cec3d3', color: '#4b0082', fontFamily: 'Inter, sans-serif' }}>
-                            ✎ Edit
-                          </button>
+                          <div className="flex gap-2">
+                            <button onClick={() => { setEditingId(r.id); setEditValue(String(r.ratePerDollar)) }}
+                              className="px-3 py-1.5 text-xs font-bold rounded-lg hover:bg-indigo-50 transition-colors"
+                              style={{ border: '1px solid #cec3d3', color: '#4b0082', fontFamily: 'Inter, sans-serif' }}>
+                              ✎ Edit
+                            </button>
+                            <button onClick={() => setDeleteConfirm(r.id)}
+                              className="px-3 py-1.5 text-xs font-bold rounded-lg hover:bg-red-50 transition-colors"
+                              style={{ border: '1px solid #fecaca', color: '#dc2626', fontFamily: 'Inter, sans-serif' }}>
+                              🗑 Delete
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -221,11 +238,12 @@ export default function AdminRatesPage() {
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: '#4c4451', fontFamily: 'Inter, sans-serif', letterSpacing: '0.05em' }}>Denomination ($)</label>
-                <select value={newRate.denomination} onChange={e => setNewRate(p => ({ ...p, denomination: e.target.value ?? '' }))}
-                  style={{ ...inputStyle, width: '100%' }} onFocus={e => e.target.style.borderColor = '#4b0082'} onBlur={e => e.target.style.borderColor = '#e5e7eb'}>
-                  <option value="">Select denomination...</option>
-                  {DENOMINATIONS.map(d => <option key={d} value={String(d)}>${d}</option>)}
-                </select>
+                <input type="number" step="1" min="1" placeholder="e.g. 25, 50, 100..." value={newRate.denomination}
+                  onChange={e => setNewRate(p => ({ ...p, denomination: e.target.value }))}
+                  style={{ ...inputStyle, width: '100%' }} onFocus={e => e.target.style.borderColor = '#4b0082'} onBlur={e => e.target.style.borderColor = '#e5e7eb'} />
+                <p className="mt-1 text-[10px] text-slate-400" style={{ fontFamily: 'Inter, sans-serif' }}>
+                  Common: ${DENOMINATIONS.join(', $')}
+                </p>
               </div>
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: '#4c4451', fontFamily: 'Inter, sans-serif', letterSpacing: '0.05em' }}>Rate per $1 (GHS)</label>
@@ -240,6 +258,26 @@ export default function AdminRatesPage() {
                 className="flex-1 py-3 text-white font-bold rounded-xl"
                 style={{ backgroundColor: '#4b0082', fontFamily: 'Manrope, sans-serif' }}>
                 Add Rate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl p-8 w-full max-w-sm" style={{ boxShadow: '0 20px 60px rgba(75,0,130,0.15)' }}>
+            <h3 className="mb-3" style={{ fontFamily: 'Manrope, sans-serif', fontSize: '18px', fontWeight: 700, color: '#1e1b4b' }}>Delete Rate?</h3>
+            <p className="mb-6 text-sm" style={{ color: '#4c4451', fontFamily: 'Inter, sans-serif' }}>
+              Are you sure you want to delete this denomination? This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-3 font-bold rounded-xl" style={{ border: '1px solid #cec3d3', color: '#4c4451', fontFamily: 'Manrope, sans-serif' }}>Cancel</button>
+              <button onClick={() => deleteRate(deleteConfirm)}
+                className="flex-1 py-3 text-white font-bold rounded-xl"
+                style={{ backgroundColor: '#dc2626', fontFamily: 'Manrope, sans-serif' }}>
+                Delete
               </button>
             </div>
           </div>
