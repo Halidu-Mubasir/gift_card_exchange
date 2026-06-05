@@ -10,11 +10,12 @@ interface Rate {
   denomination: number
   ratePerDollar: number
   currency: string
-  cardType: { name: string }
+  cardType: { name: string; logoUrl?: string | null }
 }
 
 interface CardTypeRate {
   cardType: string
+  logoUrl?: string | null
   avgRate: number
   currency: string
   denominations: number[]
@@ -58,6 +59,7 @@ export default function SellerRatesPage() {
 
     return {
       cardType: name,
+      logoUrl: typeRates[0].cardType.logoUrl,
       avgRate,
       currency: typeRates[0].currency,
       denominations,
@@ -135,12 +137,19 @@ export default function SellerRatesPage() {
                 {/* Header with Logo and Trend */}
                 <div className="flex justify-between items-start mb-6">
                   <div
-                    className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center group-hover:scale-105 transition-transform"
-                    style={{ backgroundColor: card.color }}
+                    className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center p-2 group-hover:scale-105 transition-transform overflow-hidden"
                   >
-                    <span className="text-2xl font-bold text-white" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                      {card.cardType.slice(0, 2).toUpperCase()}
-                    </span>
+                    {card.logoUrl ? (
+                      <img
+                        src={card.logoUrl}
+                        alt={`${card.cardType} logo`}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <span className="text-2xl font-bold text-white" style={{ fontFamily: 'Manrope, sans-serif', backgroundColor: card.color, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '1rem' }}>
+                        {card.cardType.slice(0, 2).toUpperCase()}
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-col items-end">
                     {card.trend !== undefined && card.trend !== 0 && (

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-interface CardType { id: string; name: string }
+interface CardType { id: string; name: string; logoUrl?: string | null }
 interface Rate { cardTypeId: string; denomination: number; ratePerDollar: number; currency: string }
 
 const DRAFT_KEY = 'ep_submit_draft'
@@ -256,17 +256,28 @@ export default function SubmitCardPage() {
             <div className="px-6 pb-6 pt-2">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {Object.entries(
-                  rates.reduce<Record<string, Rate[]>>((acc, r) => {
-                    const name = cardTypes.find(ct => ct.id === r.cardTypeId)?.name ?? 'Unknown'
-                    if (!acc[name]) acc[name] = []
-                    acc[name].push(r)
+                  rates.reduce<Record<string, { rates: Rate[]; cardType: CardType }>>((acc, r) => {
+                    const cardType = cardTypes.find(ct => ct.id === r.cardTypeId)
+                    const name = cardType?.name ?? 'Unknown'
+                    if (!acc[name]) acc[name] = { rates: [], cardType: cardType! }
+                    acc[name].rates.push(r)
                     return acc
                   }, {})
-                ).map(([typeName, typeRates]) => (
+                ).map(([typeName, { rates: typeRates, cardType }]) => (
                   <div key={typeName} className="border border-gray-200 rounded-lg p-4" style={{ backgroundColor: '#fafafa' }}>
                     <div className="flex items-center gap-2 mb-3">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: '#4b0082' }}>
-                        {typeName.slice(0, 2).toUpperCase()}
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden bg-slate-50 border border-slate-100 p-1">
+                        {cardType.logoUrl ? (
+                          <img
+                            src={cardType.logoUrl}
+                            alt={`${typeName} logo`}
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <span className="text-white text-xs font-bold" style={{ backgroundColor: '#4b0082', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '0.375rem' }}>
+                            {typeName.slice(0, 2).toUpperCase()}
+                          </span>
+                        )}
                       </div>
                       <span className="font-bold text-indigo-900" style={{ fontFamily: 'Manrope, sans-serif' }}>{typeName}</span>
                     </div>

@@ -19,11 +19,12 @@ interface Rate {
   denomination: number
   ratePerDollar: number
   currency: string
-  cardType: { name: string }
+  cardType: { name: string; logoUrl?: string | null }
 }
 
 interface TopRate {
   cardType: string
+  logoUrl?: string | null
   avgRate: number
   color: string
 }
@@ -60,10 +61,10 @@ export default function SellerDashboardPage() {
       if (d.success) {
         const rates: Rate[] = d.data
         // Group by card type and calculate average rate
-        const grouped = rates.reduce<Record<string, number[]>>((acc, r) => {
+        const grouped = rates.reduce<Record<string, Rate[]>>((acc, r) => {
           const name = r.cardType?.name ?? 'Unknown'
           if (!acc[name]) acc[name] = []
-          acc[name].push(r.ratePerDollar)
+          acc[name].push(r)
           return acc
         }, {})
 
@@ -72,7 +73,8 @@ export default function SellerDashboardPage() {
         const top = Object.entries(grouped)
           .map(([name, ratesArr], idx) => ({
             cardType: name,
-            avgRate: ratesArr.reduce((sum, r) => sum + r, 0) / ratesArr.length,
+            logoUrl: ratesArr[0].cardType.logoUrl,
+            avgRate: ratesArr.reduce((sum, r) => sum + r.ratePerDollar, 0) / ratesArr.length,
             color: colors[idx % colors.length],
           }))
           .slice(0, 3)
@@ -205,12 +207,22 @@ export default function SellerDashboardPage() {
             <div className="py-8 text-center text-slate-400 text-sm">No rates available</div>
           ) : (
             <div className="space-y-4">
-              {topRates.map(({ cardType, avgRate, color }) => (
+              {topRates.map(({ cardType, logoUrl, avgRate, color }) => (
                 <div key={cardType} className="flex justify-between items-center text-sm">
                   <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold" style={{ backgroundColor: color }}>
-                      {cardType[0]}
-                    </span>
+                    <div className="w-8 h-8 rounded flex items-center justify-center overflow-hidden bg-slate-50 border border-slate-100 p-1">
+                      {logoUrl ? (
+                        <img
+                          src={logoUrl}
+                          alt={`${cardType} logo`}
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-xs font-bold" style={{ backgroundColor: color, color: 'white', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '0.25rem' }}>
+                          {cardType[0]}
+                        </span>
+                      )}
+                    </div>
                     <span className="font-semibold text-indigo-900">{cardType}</span>
                   </div>
                   <span className="font-bold" style={{ color: '#006e2a' }}>
