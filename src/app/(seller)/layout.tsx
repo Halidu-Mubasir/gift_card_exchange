@@ -10,6 +10,7 @@ const navItems = [
   { href: '/seller/dashboard', label: 'Dashboard', icon: '⊞' },
   { href: '/seller/submit', label: 'Sell Card', icon: '＋' },
   { href: '/seller/history', label: 'Transactions', icon: '≡' },
+  { href: '/seller/rates', label: 'View Rates', icon: '📊' },
   { href: '/seller/messages', label: 'Messages', icon: '💬' },
 ]
 

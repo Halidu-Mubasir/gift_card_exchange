@@ -4,6 +4,11 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 export async function GET() {
+  const session = await getServerSession()
+  if (!session) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+  }
+
   const rates = await prisma.exchangeRate.findMany({
     include: { cardType: true },
     orderBy: [{ cardType: { name: 'asc' } }, { denomination: 'asc' }],

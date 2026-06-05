@@ -98,6 +98,7 @@ export default function SubmitCardPage() {
 
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [ratesExpanded, setRatesExpanded] = useState(false)
 
   // Load data + restore draft
   useEffect(() => {
@@ -231,6 +232,66 @@ export default function SubmitCardPage() {
           ))}
         </div>
       </div>
+
+      {/* Rates Preview - Collapsible */}
+      {!loadingData && rates.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ boxShadow: cardShadow }}>
+          <button
+            type="button"
+            onClick={() => setRatesExpanded(!ratesExpanded)}
+            className="w-full flex items-center justify-between p-6 hover:bg-slate-50/60 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <span style={{ fontSize: '20px' }}>💰</span>
+              <span className="font-bold text-indigo-900" style={{ fontFamily: 'Manrope, sans-serif', fontSize: '15px' }}>
+                View Current Exchange Rates
+              </span>
+            </div>
+            <span style={{ color: '#4b0082', fontSize: '18px', transform: ratesExpanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}>
+              ▼
+            </span>
+          </button>
+
+          {ratesExpanded && (
+            <div className="px-6 pb-6 pt-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Object.entries(
+                  rates.reduce<Record<string, Rate[]>>((acc, r) => {
+                    const name = cardTypes.find(ct => ct.id === r.cardTypeId)?.name ?? 'Unknown'
+                    if (!acc[name]) acc[name] = []
+                    acc[name].push(r)
+                    return acc
+                  }, {})
+                ).map(([typeName, typeRates]) => (
+                  <div key={typeName} className="border border-gray-200 rounded-lg p-4" style={{ backgroundColor: '#fafafa' }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: '#4b0082' }}>
+                        {typeName.slice(0, 2).toUpperCase()}
+                      </div>
+                      <span className="font-bold text-indigo-900" style={{ fontFamily: 'Manrope, sans-serif' }}>{typeName}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {typeRates.sort((a, b) => a.denomination - b.denomination).slice(0, 4).map(r => (
+                        <div key={r.denomination} className="flex justify-between items-center text-sm">
+                          <span style={{ color: '#4c4451', fontWeight: 600 }}>${r.denomination}</span>
+                          <span style={{ color: '#15803d', fontWeight: 700, fontFamily: 'Manrope, sans-serif' }}>
+                            GHS {(r.denomination * r.ratePerDollar).toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 pt-4 border-t border-gray-200 text-center">
+                <a href="/seller/rates" className="text-sm font-bold hover:underline" style={{ color: '#4b0082', fontFamily: 'Inter, sans-serif' }}>
+                  See Full Rate Details →
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Form Card */}
       <form onSubmit={handleSubmit}>

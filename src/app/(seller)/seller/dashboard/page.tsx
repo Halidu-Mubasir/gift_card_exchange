@@ -13,6 +13,21 @@ interface Submission {
   payout?: { amount: number; currency: string } | null
 }
 
+interface Rate {
+  id: string
+  cardTypeId: string
+  denomination: number
+  ratePerDollar: number
+  currency: string
+  cardType: { name: string }
+}
+
+interface TopRate {
+  cardType: string
+  avgRate: number
+  color: string
+}
+
 const statusStyle: Record<string, { bg: string; text: string; dotColor: string; pulse?: boolean }> = {
   PENDING: { bg: '#fffbeb', text: '#92400e', dotColor: '#f59e0b', pulse: true },
   UNDER_REVIEW: { bg: '#eff6ff', text: '#1d4ed8', dotColor: '#3b82f6' },
@@ -34,10 +49,36 @@ function StatusChip({ status }: { status: string }) {
 export default function SellerDashboardPage() {
   const router = useRouter()
   const [submissions, setSubmissions] = useState<Submission[]>([])
+  const [topRates, setTopRates] = useState<TopRate[]>([])
   const [loading, setLoading] = useState(true)
+  const [ratesLoading, setRatesLoading] = useState(true)
 
   useEffect(() => {
     fetch('/api/submissions').then(r => r.json()).then(d => { if (d.success) setSubmissions(d.data) }).finally(() => setLoading(false))
+
+    fetch('/api/rates').then(r => r.json()).then(d => {
+      if (d.success) {
+        const rates: Rate[] = d.data
+        // Group by card type and calculate average rate
+        const grouped = rates.reduce<Record<string, number[]>>((acc, r) => {
+          const name = r.cardType?.name ?? 'Unknown'
+          if (!acc[name]) acc[name] = []
+          acc[name].push(r.ratePerDollar)
+          return acc
+        }, {})
+
+        // Get top 3 card types with colors
+        const colors = ['#fed7aa', '#bfdbfe', '#bbf7d0', '#fde68a', '#e9d5ff']
+        const top = Object.entries(grouped)
+          .map(([name, ratesArr], idx) => ({
+            cardType: name,
+            avgRate: ratesArr.reduce((sum, r) => sum + r, 0) / ratesArr.length,
+            color: colors[idx % colors.length],
+          }))
+          .slice(0, 3)
+        setTopRates(top)
+      }
+    }).finally(() => setRatesLoading(false))
   }, [])
 
   const total = submissions.length
@@ -152,18 +193,33 @@ export default function SellerDashboardPage() {
 
         {/* Market Rates */}
         <div className="md:col-span-4 bg-white border border-gray-100 rounded-2xl p-6" style={{ boxShadow: cardShadow }}>
-          <h4 className="font-bold text-indigo-950 mb-5" style={{ fontFamily: 'Manrope, sans-serif' }}>Market Rates</h4>
-          <div className="space-y-4">
-            {[{ name: 'Amazon', rate: '92%', color: '#fed7aa' }, { name: 'iTunes', rate: '88%', color: '#bfdbfe' }, { name: 'Steam', rate: '85%', color: '#bbf7d0' }].map(({ name, rate, color }) => (
-              <div key={name} className="flex justify-between items-center text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold" style={{ backgroundColor: color }}>{name[0]}</span>
-                  <span className="font-semibold text-indigo-900">{name}</span>
-                </div>
-                <span className="font-bold" style={{ color: '#006e2a' }}>{rate}</span>
-              </div>
-            ))}
+          <div className="flex items-center justify-between mb-5">
+            <h4 className="font-bold text-indigo-950" style={{ fontFamily: 'Manrope, sans-serif' }}>Market Rates</h4>
+            <Link href="/seller/rates" className="text-xs font-bold hover:underline" style={{ color: '#4b0082', fontFamily: 'Inter, sans-serif' }}>
+              View All →
+            </Link>
           </div>
+          {ratesLoading ? (
+            <div className="py-8 text-center text-slate-400 text-sm">Loading rates...</div>
+          ) : topRates.length === 0 ? (
+            <div className="py-8 text-center text-slate-400 text-sm">No rates available</div>
+          ) : (
+            <div className="space-y-4">
+              {topRates.map(({ cardType, avgRate, color }) => (
+                <div key={cardType} className="flex justify-between items-center text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold" style={{ backgroundColor: color }}>
+                      {cardType[0]}
+                    </span>
+                    <span className="font-semibold text-indigo-900">{cardType}</span>
+                  </div>
+                  <span className="font-bold" style={{ color: '#006e2a' }}>
+                    {avgRate.toFixed(2)} GHS/$
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="mt-6 pt-4 border-t border-gray-100">
             <p className="text-xs text-slate-400 text-center" style={{ fontFamily: 'Inter, sans-serif' }}>Rates update in real-time</p>
           </div>
