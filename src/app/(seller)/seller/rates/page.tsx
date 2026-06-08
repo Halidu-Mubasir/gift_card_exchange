@@ -13,15 +13,15 @@ interface Rate {
   cardType: { name: string; logoUrl?: string | null }
 }
 
-interface CardTypeRate {
+interface CardTypeRates {
   cardType: string
   logoUrl?: string | null
-  avgRate: number
-  currency: string
-  denominations: number[]
-  trend?: number
-  isHot?: boolean
-  color: string
+  rates: Array<{
+    denomination: number
+    ratePerDollar: number
+    currency: string
+    totalPayout: number
+  }>
 }
 
 const cardShadow = '0 4px 20px rgba(75,0,130,0.04)'
@@ -30,7 +30,6 @@ export default function SellerRatesPage() {
   const [rates, setRates] = useState<Rate[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
 
   useEffect(() => {
     fetch('/api/rates')
@@ -41,33 +40,26 @@ export default function SellerRatesPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  // Group rates by card type and calculate averages
-  const cardTypeRates: CardTypeRate[] = Object.entries(
+  // Group rates by card type (keep individual denominations)
+  const cardTypeRates: CardTypeRates[] = Object.entries(
     rates.reduce<Record<string, Rate[]>>((acc, r) => {
       const name = r.cardType?.name ?? 'Unknown'
       if (!acc[name]) acc[name] = []
       acc[name].push(r)
       return acc
     }, {})
-  ).map(([name, typeRates], idx) => {
-    const avgRate = typeRates.reduce((sum, r) => sum + r.ratePerDollar, 0) / typeRates.length
-    const denominations = typeRates.map(r => r.denomination).sort((a, b) => a - b)
-
-    // Assign random trends for demo (in production, this would come from API)
-    const trends = [2.4, -0.8, 5.1, 0, 1.2, -3.4]
-    const colors = ['#fed7aa', '#bfdbfe', '#bbf7d0', '#fde68a', '#e9d5ff', '#fecaca']
-
-    return {
-      cardType: name,
-      logoUrl: typeRates[0].cardType.logoUrl,
-      avgRate,
-      currency: typeRates[0].currency,
-      denominations,
-      trend: trends[idx % trends.length],
-      isHot: avgRate > 12, // Mark rates above 12 as "hot"
-      color: colors[idx % colors.length],
-    }
-  })
+  ).map(([name, typeRates]) => ({
+    cardType: name,
+    logoUrl: typeRates[0].cardType.logoUrl,
+    rates: typeRates
+      .sort((a, b) => a.denomination - b.denomination)
+      .map(r => ({
+        denomination: r.denomination,
+        ratePerDollar: r.ratePerDollar,
+        currency: r.currency,
+        totalPayout: r.denomination * r.ratePerDollar,
+      })),
+  }))
 
   const filteredRates = cardTypeRates.filter(r =>
     r.cardType.toLowerCase().includes(searchQuery.toLowerCase())
@@ -81,7 +73,7 @@ export default function SellerRatesPage() {
           Current Market Rates
         </h1>
         <p style={{ fontSize: '16px', color: '#4c4451', lineHeight: '24px', marginTop: '8px', maxWidth: '600px' }}>
-          Our rates are updated in real-time based on global market demand. Sell when rates are high to maximize your payouts.
+          Our rates are updated in real-time based on global market demand. Different denominations have different rates - higher amounts typically get better rates.
         </p>
       </div>
 
@@ -95,7 +87,7 @@ export default function SellerRatesPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-12 pr-4 py-4 rounded-2xl border border-gray-200 bg-white shadow-sm focus:ring-2 focus:ring-[#4b0082] focus:border-transparent transition-all outline-none"
             style={{ fontFamily: 'Inter, sans-serif', fontSize: '14px' }}
-            placeholder="Search by brand name (e.g. Amazon, Nike)..."
+            placeholder="Search by brand name (e.g. Amazon, iTunes)..."
           />
         </div>
         <div className="md:col-span-4 flex gap-3">
@@ -106,11 +98,6 @@ export default function SellerRatesPage() {
             <option>UK</option>
             <option>Europe</option>
           </select>
-          <button
-            onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-            className="bg-white border border-gray-200 p-4 rounded-2xl shadow-sm hover:bg-slate-50 transition-colors">
-            <Grid3x3 size={20} className="text-slate-600" />
-          </button>
         </div>
       </div>
 
@@ -126,95 +113,104 @@ export default function SellerRatesPage() {
         </div>
       ) : (
         <>
-          {/* Rates Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredRates.map((card) => (
+          {/* Rates Grid - Card Type Sections */}
+          <div className="space-y-6">
+            {filteredRates.map((cardGroup) => (
               <div
-                key={card.cardType}
-                className="bg-white rounded-[2rem] border border-gray-200 p-6 hover:shadow-xl hover:shadow-indigo-500/5 transition-all group"
+                key={cardGroup.cardType}
+                className="bg-white rounded-[2rem] border border-gray-200 overflow-hidden"
                 style={{ boxShadow: cardShadow }}
               >
-                {/* Header with Logo and Trend */}
-                <div className="flex justify-between items-start mb-6">
-                  <div
-                    className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center p-2 group-hover:scale-105 transition-transform overflow-hidden"
-                  >
-                    {card.logoUrl ? (
+                {/* Card Type Header */}
+                <div className="p-6 flex items-center gap-4 border-b border-gray-100" style={{ backgroundColor: 'rgba(248,250,252,0.5)' }}>
+                  <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center p-3 overflow-hidden">
+                    {cardGroup.logoUrl ? (
                       <img
-                        src={card.logoUrl}
-                        alt={`${card.cardType} logo`}
+                        src={cardGroup.logoUrl}
+                        alt={`${cardGroup.cardType} logo`}
                         className="w-full h-full object-contain"
                       />
                     ) : (
-                      <span className="text-2xl font-bold text-white" style={{ fontFamily: 'Manrope, sans-serif', backgroundColor: card.color, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '1rem' }}>
-                        {card.cardType.slice(0, 2).toUpperCase()}
+                      <span className="text-2xl font-bold text-white" style={{ fontFamily: 'Manrope, sans-serif', backgroundColor: '#4b0082', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '1rem' }}>
+                        {cardGroup.cardType.slice(0, 2).toUpperCase()}
                       </span>
                     )}
                   </div>
-                  <div className="flex flex-col items-end">
-                    {card.trend !== undefined && card.trend !== 0 && (
-                      <>
-                        <span className={`font-bold flex items-center text-sm ${card.trend > 0 ? 'text-[#006e2a]' : 'text-[#ba1a1a]'}`}>
-                          {card.trend > 0 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
-                          {card.trend > 0 ? '+' : ''}{card.trend}%
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Last 24h</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Card Name & Region */}
-                <div className="mb-6">
-                  <h3 style={{ fontFamily: 'Manrope, sans-serif', fontSize: '24px', fontWeight: 600, letterSpacing: '-0.01em', color: '#2e0052', lineHeight: '32px' }}>
-                    {card.cardType}
-                  </h3>
-                  <p style={{ fontSize: '14px', color: '#64748b', lineHeight: '20px' }}>
-                    Available: ${card.denominations.join(', $')}
-                  </p>
-                </div>
-
-                {/* Exchange Rate */}
-                <div className="flex items-end justify-between mb-8">
                   <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1" style={{ letterSpacing: '0.05em' }}>
-                      Exchange Rate
-                    </span>
-                    <span className="text-4xl font-extrabold text-indigo-950" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                      {card.avgRate.toFixed(2)}
-                    </span>
-                    <span className="text-lg font-semibold text-slate-500 ml-1">
-                      {card.currency}/$
-                    </span>
-                  </div>
-                  <div className="flex -space-x-2">
-                    <div className="w-8 h-8 rounded-full border-2 border-white bg-green-100 flex items-center justify-center">
-                      <Shield size={14} className="text-green-600" fill="currentColor" />
-                    </div>
-                    {card.isHot && (
-                      <div className="w-8 h-8 rounded-full border-2 border-white bg-indigo-100 flex items-center justify-center">
-                        <Zap size={14} className="text-indigo-600" fill="currentColor" />
-                      </div>
-                    )}
+                    <h2 style={{ fontFamily: 'Manrope, sans-serif', fontSize: '24px', fontWeight: 700, letterSpacing: '-0.01em', color: '#2e0052' }}>
+                      {cardGroup.cardType}
+                    </h2>
+                    <p style={{ fontSize: '14px', color: '#64748b' }}>
+                      {cardGroup.rates.length} denomination{cardGroup.rates.length !== 1 ? 's' : ''} available
+                    </p>
                   </div>
                 </div>
 
-                {/* Hot Rate Badge */}
-                {card.isHot && (
-                  <div className="mb-4">
-                    <span className="inline-block px-3 py-1 bg-[#ffddb3] text-[#624000] text-[10px] font-bold rounded-full uppercase tracking-tight">
-                      Hot Rate
-                    </span>
+                {/* Denomination Rates Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead style={{ backgroundColor: 'rgba(248,250,252,0.3)' }}>
+                      <tr>
+                        <th className="text-left px-6 py-3 text-[11px] font-bold text-slate-400 uppercase" style={{ letterSpacing: '0.06em' }}>Card Value</th>
+                        <th className="text-left px-6 py-3 text-[11px] font-bold text-slate-400 uppercase" style={{ letterSpacing: '0.06em' }}>Rate per $1</th>
+                        <th className="text-left px-6 py-3 text-[11px] font-bold text-slate-400 uppercase" style={{ letterSpacing: '0.06em' }}>You Receive</th>
+                        <th className="text-right px-6 py-3 text-[11px] font-bold text-slate-400 uppercase" style={{ letterSpacing: '0.06em' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cardGroup.rates.map((rate, idx) => (
+                        <tr key={rate.denomination} className="hover:bg-slate-50/60 transition-colors border-t border-gray-50">
+                          <td className="px-6 py-4">
+                            <span className="font-bold text-indigo-900 text-lg" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                              ${rate.denomination}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-sm" style={{ color: '#4b0082' }}>
+                                {rate.ratePerDollar.toFixed(2)} {rate.currency}/$
+                              </span>
+                              {idx > 0 && cardGroup.rates[idx - 1].ratePerDollar !== rate.ratePerDollar && (
+                                <span className={`text-xs font-semibold ${rate.ratePerDollar > cardGroup.rates[idx - 1].ratePerDollar ? 'text-green-600' : 'text-orange-600'}`}>
+                                  {rate.ratePerDollar > cardGroup.rates[idx - 1].ratePerDollar ? (
+                                    <TrendingUp size={14} className="inline" />
+                                  ) : (
+                                    <TrendingDown size={14} className="inline" />
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="font-bold text-lg" style={{ color: '#15803d', fontFamily: 'Manrope, sans-serif' }}>
+                              {rate.currency} {rate.totalPayout.toFixed(2)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <Link href="/seller/submit">
+                              <button className="px-4 py-2 rounded-xl border-2 border-[#2e0052] text-[#2e0052] text-sm font-bold hover:bg-[#2e0052] hover:text-white transition-all active:scale-95"
+                                style={{ fontFamily: 'Manrope, sans-serif' }}>
+                                Sell Now
+                              </button>
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Best Rate Badge (if applicable) */}
+                {cardGroup.rates.length > 1 && (
+                  <div className="px-6 py-4 bg-gradient-to-r from-purple-50 to-indigo-50 border-t border-gray-100">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Zap size={16} className="text-indigo-600" fill="currentColor" />
+                      <span style={{ color: '#4b0082', fontWeight: 600, fontFamily: 'Inter, sans-serif' }}>
+                        Best rate: ${Math.max(...cardGroup.rates.map(r => r.denomination))} gets {Math.max(...cardGroup.rates.map(r => r.ratePerDollar)).toFixed(2)} {cardGroup.rates[0].currency}/$
+                      </span>
+                    </div>
                   </div>
                 )}
-
-                {/* Sell Now Button */}
-                <Link href="/seller/submit">
-                  <button className="w-full py-4 rounded-xl border-2 border-[#2e0052] text-[#2e0052] font-bold hover:bg-[#2e0052] hover:text-white transition-all active:scale-[0.98]"
-                    style={{ fontFamily: 'Manrope, sans-serif' }}>
-                    Sell Now
-                  </button>
-                </Link>
               </div>
             ))}
           </div>
@@ -236,10 +232,10 @@ export default function SellerRatesPage() {
             <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
               <div className="text-center md:text-left max-w-xl">
                 <h2 style={{ fontFamily: 'Manrope, sans-serif', fontSize: '24px', fontWeight: 600, letterSpacing: '-0.01em', marginBottom: '16px' }}>
-                  Need help with rates?
+                  Questions about our rates?
                 </h2>
                 <p style={{ fontSize: '16px', lineHeight: '24px', color: '#bfdbfe' }}>
-                  Our support team is available 24/7 to explain how our dynamic pricing works or to help with bulk trading options.
+                  Rates vary by denomination because larger amounts are more valuable to buyers. Our support team can explain why rates change and help with bulk trading.
                 </p>
               </div>
               <div className="flex gap-4 flex-shrink-0">
@@ -249,10 +245,6 @@ export default function SellerRatesPage() {
                     Chat with Support
                   </button>
                 </Link>
-                <button className="px-8 py-4 bg-transparent border-2 border-white/30 text-white font-bold rounded-2xl hover:bg-white/10 transition-all"
-                  style={{ fontFamily: 'Manrope, sans-serif' }}>
-                  View Details
-                </button>
               </div>
             </div>
           </div>
